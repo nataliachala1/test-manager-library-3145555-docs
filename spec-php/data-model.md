@@ -4,7 +4,7 @@
 al motor para saber qué hay, de qué tipo y con qué regla.
 
 - Motor de referencia: PostgreSQL 16. Esquema `library`. Servidor en UTC.
-- Rige bajo [`constitution.md`](constitution.md) y [`spec.md`](spec.md). Si algo contradice a este documento, gana este documento.
+- Rige bajo [`constitution.md`](constitution.md) y [`spec.md`](spec.md). Este documento define el esquema esperado; no puede cambiar unilateralmente requisitos funcionales aprobados. Si una decisión funcional contradice el modelo, se registra y corrige la documentación antes de implementar; si la base desplegada contradice el modelo documentado, la migración/despliegue es el defecto y debe alinearse con este documento.
 
 Cada regla lleva una de **tres marcas**: **motor** (la impone la base), **solo dominio** (solo el código),
 **pendiente (T-xx)** (la pone esa tarea de [`tasks.md`](tasks.md)).
@@ -129,7 +129,7 @@ porque ningún requisito las pide.
 | `book.category_id` → `category.id` RESTRICT | FK | **motor** |
 | `loan.member_id` → `member.id` RESTRICT | FK | **motor** |
 | `loan.loaned_by_user_id` → `user.id` RESTRICT | FK | **motor** |
-| `loan_item.loan_id` → `loan.id` CASCADE | FK | **motor** |
+| `loan_item.loan_id` → `loan.id` CASCADE | FK | **motor**, con riesgo documentado en §5 y DT-006 |
 | `loan_item.book_id` → `book.id` RESTRICT | FK | **motor** |
 | `0 <= available_copies <= total_copies` | `ck_book_available_range` | **motor** — última barrera de concurrencia |
 | `version >= 1` | `ck_book_version_positive` | **motor** |
@@ -154,12 +154,14 @@ Si no se modifica ninguna fila, el adaptador traduce el conflicto a `BOOK_NOT_AV
 | # | FK | `ON DELETE` | Por qué |
 |---|---|---|---|
 | FK-1 | `book.category_id` | RESTRICT | Una categoría con libros no se elimina |
-| FK-2 | `loan_item.loan_id` | CASCADE | Composición: la línea no vive sin su préstamo (nunca se dispara: no se borran préstamos) |
+| FK-2 | `loan_item.loan_id` | CASCADE | Composición: la línea no vive sin su préstamo. Aunque no existe una operación aprobada para borrar préstamos, una eliminación directa del padre sí borraría el historial en cascada; ver el riesgo DT-006. No se considera protegida por la intención de no borrar. |
 | FK-3 | `loan_item.book_id` | RESTRICT | Barrera de última instancia: un borrado manual no puede huerfanar el histórico |
 | FK-4 | `loan.member_id` | RESTRICT | El socio de un préstamo no desaparece |
 | FK-5 | `loan.loaned_by_user_id` | RESTRICT | La autoría es un dato contable |
 
 `ON UPDATE NO ACTION` en todas: las claves son UUID de la aplicación y no cambian.
+
+**Integridad y retención:** las claves de socio, usuario y libro que forman parte de un préstamo deben seguir resolviendo a sus registros; las líneas conservan los valores congelados y no se deben borrar durante la retención indefinida. `RESTRICT` protege las referencias a socio, usuario y libro. La FK de línea a préstamo con `CASCADE` es una excepción que permite pérdida de históricos ante un borrado directo; elegir `RESTRICT` o un mecanismo de retención equivalente requiere decisión de arquitectura y permanece pendiente (DT-006). Hasta resolverla, no se debe ejecutar una operación de borrado de `loan`.
 
 ## 6. Patrones de acceso
 
@@ -227,5 +229,4 @@ WHERE n.nspname = 'library' ORDER BY 1, 3, 2;
 SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = 'library' ORDER BY 1, 2;
 ```
 
-Si una regla marcada **motor** no aparece, alguien la borró. Si una marcada **solo dominio** aparece, ya se bajó y hay que reclasificarla.
-Gana el motor: el documento está roto y se corrige el documento.
+Si una regla marcada **motor** no aparece, existe una discrepancia de esquema que debe investigarse frente al documento y las migraciones. Si una marcada **solo dominio** aparece, ya se bajó y hay que reclasificarla. La consulta observa la base implementada; no convierte una desviación de la base en requisito.

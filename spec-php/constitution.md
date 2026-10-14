@@ -61,9 +61,9 @@ La línea de préstamo guarda título, ISBN y categoría del instante del prést
 Ni contraseñas, ni hashes precalculados, ni la clave del token. Todo secreto viene del entorno. El `.env` real está en `.gitignore`; solo se versiona `.env.example`.
 **Verificación:** `gitleaks` o un `grep` de patrones en CI; ninguna respuesta HTTP incluye `password` ni `password_hash`.
 
-## Artículo X — Gana el motor
+## Artículo X — La base aplica el modelo documentado
 
-Si el documento de datos y la base discrepan, el documento está roto y se corrige el documento.
+`data-model.md` define el esquema esperado; las migraciones son su implementación ejecutable. Si una base desplegada difiere de `data-model.md`, esa diferencia es un defecto de migración o de despliegue que se investiga y corrige en el esquema, sin alterar el requisito documentado para ajustarlo a una desviación accidental. Si un requisito aprobado contradice el modelo, la inconsistencia se resuelve en la documentación y se registra la decisión antes de implementar; no se presume que la base o el documento puedan cambiar unilateralmente el comportamiento funcional.
 
 ## Artículo XI — Idioma
 

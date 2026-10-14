@@ -3,6 +3,12 @@
 Cómo se construye lo que dicen [`spec.md`](spec.md) y [`constitution.md`](constitution.md). El esquema **no** se describe aquí: vive en
 [`data-model.md`](data-model.md). La forma del sistema, en [`architecture.md`](architecture.md).
 
+## 0. Fase documental obligatoria y puerta de desarrollo
+
+Antes de crear código ejecutable se completa la revisión de [HU-01](hu/HU-01.md) a [HU-10](hu/HU-10.md): criterios frente a `spec.md`, reglas y contratos, modelo y arquitectura, tareas/repositorios responsables, y pruebas/evidencias. Los enlaces deben resolver y los bloqueos funcionales o técnicos deben tener decisión registrada. Se documentan los resultados de revisión para que el propietario pueda aprobarlos. **El desarrollo solo queda autorizado después de la aprobación expresa del propietario**; esta fase documental y su entrega no la sustituyen.
+
+Estado de esta revisión: las fichas están trazadas, pero hay bloqueos pendientes DT-006 (retención/históricos), DT-008 (datos vencidos de demostración), DT-011 (concurrencia del límite de socio) y DT-012 (código de error de autenticación). Por tanto, no se declara lista la documentación para iniciar la implementación de las HU afectadas ni completamente aprobada la documentación.
+
 ## 1. Decisiones técnicas
 
 | # | Decisión | Elección (PHP/Laravel) | Por qué |
@@ -43,8 +49,9 @@ Cómo se construye lo que dicen [`spec.md`](spec.md) y [`constitution.md`](const
 
 ## 4. Orden de construcción
 
-Esqueleto documental y salud → migración inicial con semilla → dominio → casos de uso con fakes → adaptadores Laravel → API → pruebas de contrato y concurrencia.
-El detalle, con evidencia, está en [`tasks.md`](tasks.md).
+Fase documental aprobada → esqueleto y salud → migración inicial con semilla → dominio → casos de uso con fakes → adaptadores Laravel → API → pruebas de contrato y concurrencia → infraestructura, herramienta y frontend. No se inicia una fase dependiente mientras sus decisiones bloqueantes no estén resueltas. Cada paso requiere la evidencia de [`tasks.md`](tasks.md); la puerta verificable de implementación es aprobación expresa del propietario y ausencia de bloqueos de HU.
+
+Condiciones técnicas para Laravel: PHP 8.3+, Laravel 11+, PostgreSQL 16; migraciones propietarias de todo el DDL (ADR-001); tablas singulares en `library`, UUID explícitos y timestamps desactivados según [`data-model.md`](data-model.md); configuración Eloquent explícita según [`architecture.md`](architecture.md) y DT-007; JWT HS256 y secretos por entorno. `infra` provee motor vacío, la aplicación ejecuta migraciones y provisiona admin desde entorno. Las versiones y configuración concretas deben verificarse al crear el proyecto, sin relajar el contrato.
 
 ## 5. Ciclo documental de arranque
 

@@ -24,7 +24,7 @@ flowchart LR
     SEC -. implementa .-> APP
 ```
 
-Las flechas de dependencia apuntan **hacia adentro**. `bootstrap` es el único que ve las dos mitades.
+Las flechas de dependencia apuntan **hacia adentro**. `bootstrap` es el único que ve las dos mitades. Los controladores HTTP traducen rutas y transporte a casos de uso; no contienen reglas de negocio. Los adaptadores Eloquent traducen explícitamente entre el esquema `library` y los modelos de dominio.
 
 ## 2. Estructura de carpetas
 
@@ -50,8 +50,14 @@ app/
 | `Member` | documento | documento obligatorio y único |
 | `User` | rol, hash | nombre normalizado; rol en (`admin`, `librarian`) |
 
-`LendBooksService` coordina `Book.Withdraw` y la creación de `LoanItem` dentro de una única transacción de aplicación.
-`ReturnItemService` coordina `Book.Restock` y `returned_at` dentro de una única transacción.
+`LendBooksService` coordina la lectura/revalidación del socio, sus líneas abiertas, la creación de líneas congeladas y el descuento de todos los libros dentro de una única transacción de aplicación. La versión del libro evita prestar el último ejemplar dos veces, pero no basta para defender el límite concurrente de tres líneas por socio; la estrategia para ese límite está pendiente (DT-011) y bloquea la implementación completa de HU-06.
+`ReturnItemService` coordina condicionalmente `returned_at` (solo si aún es nulo) y `Book.Restock` dentro de una única transacción. Si dos devoluciones compiten, una sola puede reintegrar existencias; la otra recibe el conflicto de HU-07.
+
+La gestión de socios (HU-05) usa `MemberRepository` para crear y buscar por nombre o documento y no ofrece borrado. La consulta/listado de préstamos (HU-08) usa `LoanRepository` para obtener líneas, filtrar por rango, estado calculado y socio, ordenar por fecha descendente y paginar. No se introduce un caso de uso o tabla adicional.
+
+### Adaptación Eloquent al esquema existente
+
+El modelo físico prevalece en nombres y relaciones: las tablas son singulares bajo el esquema PostgreSQL `library`; las claves primarias son UUID generados por la aplicación; no hay `created_at`/`updated_at`, `status` ni `days_late`. La configuración Eloquent debe declarar explícitamente tabla, clave primaria/tipo UUID, conexión/esquema y marcas de tiempo deshabilitadas. La baja lógica usa `deleted_at` solo para `Book`; no usar `SoftDeletes` en `Loan` ni `LoanItem`. Los contratos/atributos del dominio no heredan convenciones de pluralización, timestamps ni cascadas del ORM. La forma exacta de mapear UUID, esquema, borrado lógico y relaciones queda como verificación de persistencia DT-007.
 
 ## 4. Flujo: registrar un préstamo
 
@@ -74,6 +80,8 @@ sequenceDiagram
     S-->>H: préstamo o BOOK_NOT_AVAILABLE
     H-->>C: 201 o 409
 ```
+
+En una devolución, la transacción condiciona la actualización de la línea a `returned_at IS NULL` y actualiza el libro como parte de la misma operación. Para HU-08, el estado se deriva de las líneas y del reloj actual en consulta; no se persiste.
 
 ## 5. Errores
 

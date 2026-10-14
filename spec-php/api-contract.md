@@ -8,13 +8,13 @@ en [`data-model.md`](data-model.md).
 
 | Tema | Regla |
 |---|---|
-| Base | `/api/v1` |
+| Base | `/api/v1`; las rutas siguientes son relativas a esta base. `GET /health` se expone como `GET /api/v1/health` |
 | Formato | JSON, UTF-8. Nombres de campo en `snake_case` |
 | Identificadores | UUID v4 como texto |
 | Fechas | ISO 8601 en UTC, con `Z` (`2026-10-14T14:15:00Z`) |
 | Dinero | No hay. El sistema no maneja importes |
 | Autenticación | `Authorization: Bearer <token>` en todo salvo `POST /auth/login` y `GET /health` |
-| Paginación | `?page=1&size=20`. `size` máximo 50. La respuesta es `{ "items": [...], "page": 1, "size": 20, "total": 134 }` |
+| Paginación | `?page=1&size=20`. `page` empieza en 1; `size` máximo 50. La respuesta de ejemplo es `{ "items": [...], "page": 1, "size": 20, "total": 134 }`. El valor por defecto no está especificado. |
 | Idioma | Mensajes de error en español; campos y códigos en inglés |
 
 ### Cuerpo de error (único para todos los errores)
@@ -27,14 +27,14 @@ en [`data-model.md`](data-model.md).
 }
 ```
 
-`details` puede ir vacío. **Nunca** incluye trazas, SQL, rutas del servidor ni la contraseña.
+`details` puede ir vacío. **Nunca** incluye trazas, SQL, rutas del servidor ni la contraseña. Credenciales inválidas usan `INVALID_CREDENTIALS` con 401. El contrato exige 401 para token ausente, inválido o vencido pero no define un código de error para esos casos; queda pendiente en DT-012. No se distingue públicamente la causa sensible.
 
 ### Códigos de estado
 
 | Estado | Cuándo |
 |---|---|
 | 200 / 201 / 204 | Éxito / creado / sin contenido |
-| 401 | Sin token, token inválido o vencido, credenciales inválidas |
+| 401 | Sin token, token inválido o vencido; credenciales inválidas solo en `POST /auth/login` |
 | 403 | Rol insuficiente |
 | 404 | No existe (o está dado de baja) |
 | 409 | Conflicto de estado: duplicado, sin ejemplares, ya devuelto, socio con vencidos, libro con préstamos abiertos |
@@ -60,6 +60,8 @@ en [`data-model.md`](data-model.md).
 | `INVALID_DATE_RANGE` | 422 | CA-10.2 |
 
 ## 3. Endpoints
+
+Las rutas se muestran sin el prefijo común `/api/v1`. Todo endpoint protegido valida el token y después el rol; la matriz de roles de cada ruta prevalece. `401` significa que la autenticación no es válida y `403` que el usuario autenticado no tiene rol suficiente. Ningún `403` revela si el recurso existe.
 
 ### 3.1 Autenticación y salud
 
@@ -96,6 +98,8 @@ en [`data-model.md`](data-model.md).
 |---|---|---|---|
 | GET | `/categories` | autenticado | Las cinco categorías, orden por nombre |
 
+Respuesta: lista de `{ "id", "name" }`; son las cinco categorías fijas de [`data-model.md`](data-model.md) §9.
+
 ### 3.4 Libros
 
 | Método | Ruta | Rol | Descripción |
@@ -119,6 +123,8 @@ Libro (respuesta):
 }
 ```
 
+`GET /books` responde con la envoltura paginada; cada elemento usa la representación anterior. `GET /books/{id}` responde con un libro o 404. `GET /books/{id}/cover` responde el binario con `Content-Type` `image/jpeg` o `image/png`, no JSON en éxito.
+
 `POST /books` (petición): `title`, `author`, `isbn`, `category_id`, `total_copies`. Los disponibles los calcula el servidor.
 `cover_key` es una clave opaca: para pintar la portada se usa `GET /books/{id}/cover`, que devuelve el binario o 404.
 
@@ -137,6 +143,8 @@ ausente, un libro inexistente o un libro dado de baja responden `404` con el cue
 | GET | `/members/{id}` | admin, librarian | Detalle con `active_loans` (conteo sin devolver) |
 | POST | `/members` | admin, librarian | Crea: `full_name`, `document_number` |
 
+`GET /members` admite `q`, `page` y `size`; `q` busca por nombre o documento. Responde con envoltura paginada. `GET /members/{id}` incluye `active_loans`, el conteo de líneas sin devolver. `POST /members` recibe `full_name` y `document_number` y responde 201 con el socio creado. Los atributos son los definidos en [`data-model.md`](data-model.md); no existe operación de eliminación.
+
 ### 3.6 Préstamos
 
 | Método | Ruta | Rol | Descripción |
@@ -146,6 +154,8 @@ ausente, un libro inexistente o un libro dado de baja responden `404` con el cue
 | GET | `/loans/{id}` | admin, librarian | Detalle con líneas y estado |
 | POST | `/loans/{loan_id}/items/{item_id}/return` | admin, librarian | Devuelve una línea |
 | GET | `/loans/overdue` | admin, librarian | Líneas vencidas; admite `page` y `size` |
+
+En `GET /loans`, `from` y `to` son fechas `YYYY-MM-DD` inclusivas y filtran `loaned_at`; `status` admite `open`, `overdue` o `closed`, calculado al consultar; `member_id` es UUID. La respuesta es paginada y ordenada por `loaned_at` descendente (CA-08.2). `GET /loans/{id}` responde el préstamo con `items` y `status`, o 404.
 
 `POST /loans`
 
@@ -162,14 +172,16 @@ ausente, un libro inexistente o un libro dado de baja responden `404` con el cue
 }
 ```
 
+`member_id` y cada `book_id` son UUID. Se admite de 1 a 3 elementos, sin `book_id` repetido. El servidor toma el instante UTC de `loaned_at` y calcula cada vencimiento a 14 días. La creación, el descuento de existencias y la creación de todas las líneas son atómicos: si falla una línea, no se registra ninguna. La disponibilidad o un socio con vencidos produce 409; exceder el máximo de tres líneas sin devolver produce 422. La carrera entre préstamos simultáneos de un socio está pendiente de decisión; ver ADR-002 y DT-011.
+
 `status` es calculado: `open` (hay líneas sin devolver y ninguna vencida), `overdue` (alguna sin devolver y vencida), `closed` (todas devueltas).
 
-`POST /loans/{loan_id}/items/{item_id}/return` → 200 con la línea (`returned_at` lleno).
+`POST /loans/{loan_id}/items/{item_id}/return` → 200 con la línea (`returned_at` lleno). Marcar la devolución y reintegrar una unidad son atómicos. Si dos devoluciones compiten por la misma línea, solo una surte efecto; la otra responde 409 `ITEM_ALREADY_RETURNED` sin incrementar de nuevo las existencias.
 
 `GET /loans/overdue` → respuesta paginada con `items`: `{ "loan_id", "item_id", "book_title", "member_name", "due_at", "days_late" }`.
 Aquí sí se muestra el nombre del socio, porque es un listado operativo; **el reporte del §3.7 no**.
 
-### 3.7 Reporte
+### 3.7 Reporte (HU-10)
 
 | Método | Ruta | Rol | Descripción |
 |---|---|---|---|
@@ -184,7 +196,7 @@ Aquí sí se muestra el nombre del socio, porque es un listado operativo; **el r
 }
 ```
 
-Una fila por `book_id + book_title + category_name` congelados. Orden: `times_borrowed` descendente, luego título. Sin socios ni bibliotecarios.
+`from` y `to` son fechas inclusivas `YYYY-MM-DD` aplicadas a `loan.loaned_at`. Si `from` es posterior a `to`, responde 422 `INVALID_DATE_RANGE`; un rango válido sin préstamos responde `rows: []`. Cada fila agrupa `book_id`, `book_title` y `category_name` congelados en la línea; si un libro cambió de categoría dentro del rango, pueden aparecer dos filas para ese libro. `times_borrowed` cuenta las líneas prestadas en el rango. Orden: cantidad descendente y, como desempate, título ascendente. El reporte no expone socios ni bibliotecarios. Estas reglas corresponden a CA-10.1–CA-10.5 y ADR-004.
 
 ## 4. Seguridad
 

@@ -28,6 +28,8 @@ préstamos entre sedes, atributos de libro más allá de los de §3 (sin editori
 
 ## 3. Historias de usuario y criterios de aceptación
 
+Las fichas individuales conservan estos identificadores y criterios literalmente: [HU-01](hu/HU-01.md), [HU-02](hu/HU-02.md), [HU-03](hu/HU-03.md), [HU-04](hu/HU-04.md), [HU-05](hu/HU-05.md), [HU-06](hu/HU-06.md), [HU-07](hu/HU-07.md), [HU-08](hu/HU-08.md), [HU-09](hu/HU-09.md) y [HU-10](hu/HU-10.md). Este documento sigue siendo la fuente de verdad para el texto funcional y los criterios; las fichas agregan trazabilidad y evidencias sin añadir criterios.
+
 ### HU-01 · Iniciar sesión
 Como usuario quiero autenticarme para operar según mi rol.
 - **CA-01.1** Con credenciales válidas se recibe un token con vigencia de 8 horas.
